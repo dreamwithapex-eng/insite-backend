@@ -1,9 +1,10 @@
 # app/main.py
 from typing import Any, Dict, Optional, List
+from datetime import datetime
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from datetime import datetime
 
 from app.rules import analyze
 from app.data import load_parcel_from_csv
@@ -17,7 +18,6 @@ class AnalyzeRequest(BaseModel):
     parcel_id: Optional[str] = Field(default=None, description="Parcel ID to look up from city CSV")
     parcel: Optional[Dict[str, Any]] = Field(default=None, description="Parcel record as JSON object")
 
-from typing import List  # add this near the top if not already present
 
 class AnalyzeResponse(BaseModel):
     score: int
@@ -33,6 +33,7 @@ class AnalyzeResponse(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat() + "Z"}
+
 
 # ---------- B/C) Wiring + Validation + Errors ----------
 
@@ -81,3 +82,15 @@ def analyze_endpoint(req: AnalyzeRequest):
         "ruleset_version": result["ruleset_version"],
         "analyzed_at": result["analyzed_at"],
     }
+
+
+# ---------- Stable public contract alias ----------
+
+@app.post("/v1/submit", response_model=AnalyzeResponse, responses={400: {"model": dict}, 404: {"model": dict}})
+def submit(req: AnalyzeRequest):
+    """
+    Stable public endpoint for the landing page + integrations.
+    Alias to /analyze so we can keep external wiring consistent while iterating internally.
+    """
+    return analyze_endpoint(req)
+
