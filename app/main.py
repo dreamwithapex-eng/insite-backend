@@ -1,7 +1,7 @@
 # app/main.py
 from typing import Any, Dict, Optional, List
 from datetime import datetime
-
+from fast.api.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
