@@ -1,18 +1,39 @@
 # app/rules.py
-from typing import Any, Dict, List
 from datetime import datetime
 
 RULESET_VERSION = "0.1.0"
 
-def analyze(parcel: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    This is your single 'brain entrypoint'.
-    Later, you replace the placeholder logic with your real iNSITE rules engine.
-    """
-    flags: List[str] = []
-    explanations: List[str] = []
 
-    # ---- Placeholder checks (replace with your real logic) ----
+def explanations_for_tier(tier):
+    """
+    Canonical, underwriting-safe tier explanations (v0.1).
+    Intentionally brief, city-agnostic, and non-binding.
+    """
+    if tier == "green":
+        return [
+            "Parcel meets baseline zoning compatibility criteria.",
+            "No major disqualifying constraints detected at pre-feasibility stage.",
+        ]
+    elif tier == "amber":
+        return [
+            "One or more feasibility risk factors identified; further diligence recommended.",
+        ]
+    elif tier == "red":
+        return [
+            "Parcel fails one or more baseline feasibility checks.",
+        ]
+    else:
+        return []
+
+
+def analyze(parcel):
+    """
+    Single 'brain entrypoint' (placeholder rules).
+    Later, replace placeholder logic with the real iNSITE rules engine.
+    """
+    flags = []
+    explanations = []
+
     zoning = (parcel.get("zoning") or "").strip().lower()
     lot_sqft = parcel.get("lot_sqft")
 
@@ -37,17 +58,24 @@ def analyze(parcel: Dict[str, Any]) -> Dict[str, Any]:
     score = 80
     if "MISSING_ZONING" in flags:
         score -= 25
-    if "MISSING_LOT_SIZE" in flags or "INVALID_LOT_SIZE" in flags:
+    if ("MISSING_LOT_SIZE" in flags) or ("INVALID_LOT_SIZE" in flags):
         score -= 20
     if "VERY_SMALL_LOT" in flags:
         score -= 10
     score = max(0, min(100, score))
 
+    # Canonical tiers: Green / Amber / Red
+    tier = "green" if score >= 70 else ("amber" if score >= 45 else "red")
+
+    # Combine specific + tier explanations
+    explanations = explanations + explanations_for_tier(tier)
+
     return {
         "score": score,
-        "tier": "green" if score >= 70 else ("yellow" if score >= 45 else "red"),
+        "tier": tier,
         "flags": flags,
         "explanations": explanations,
         "ruleset_version": RULESET_VERSION,
         "analyzed_at": datetime.utcnow().isoformat() + "Z",
     }
+
