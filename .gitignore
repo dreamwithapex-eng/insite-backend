@@ -4,3 +4,14 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+
+# Ignore raw city parcel datasets
+data/**/raw_*.csv
+data/**/raw_*.shp
+data/**/raw_*.dbf
+data/**/raw_*.shx
+data/**/raw_*.prj
+data/**/raw_*.cpg
+data/**/raw_*.geojson
+data/**/raw_*.gpkg
+data/**/raw_*.zip
