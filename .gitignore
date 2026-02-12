@@ -15,3 +15,29 @@ data/**/raw_*.cpg
 data/**/raw_*.geojson
 data/**/raw_*.gpkg
 data/**/raw_*.zip
+# Virtual environments
+.venv/
+.venv_clean/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Toronto raw GIS (keep out of git)
+data/toronto/*.geojson
+data/toronto/*.gpkg
+data/toronto/*.zip
+data/toronto/*.shp
+data/toronto/*.dbf
+data/toronto/*.shx
+data/toronto/*.prj
+
+# Large data artifacts (keep out of git)
+data/raw/
+data/**/_tmp*.csv
+data/**/*.geojson
+data/**/*.gpkg
+data/**/*.zip
+
+# Optional: keep city parcels out if they can exceed 100MB
+data/**/parcels.csv

@@ -80,7 +80,21 @@ def analyze_endpoint(req: AnalyzeRequest):
             )
     else:
         parcel = req.parcel
+# --- Minimal v0.1 normalization (do not interpret, only normalize types) ---
+if isinstance(parcel, dict):
+    # normalize key casing/whitespace just in case
+    parcel = { (k.strip() if isinstance(k,str) else k): v for k,v in parcel.items() }
 
+    # ensure zoning is a clean string
+    if "zoning" in parcel and parcel["zoning"] is not None:
+        parcel["zoning"] = str(parcel["zoning"]).strip()
+
+    # ensure lot_sqft is numeric if possible
+    if "lot_sqft" in parcel and parcel["lot_sqft"] not in (None, ""):
+        try:
+            parcel["lot_sqft"] = float(parcel["lot_sqft"])
+        except Exception:
+            pass
     result = analyze(parcel)
 
     return {
