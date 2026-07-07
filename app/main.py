@@ -84,7 +84,6 @@ def analyze_endpoint(req: AnalyzeRequest):
     else:
         parcel = req.parcel
 
-    # Minimal normalization
     if isinstance(parcel, dict):
         parcel = {
             (k.strip() if isinstance(k, str) else k): v
@@ -100,9 +99,9 @@ def analyze_endpoint(req: AnalyzeRequest):
             except Exception:
                 pass
 
-     result = analyze(parcel)
+    result = analyze(parcel)
 
-     return {
+    return {
         "score": int(result["score"]),
         "tier": result["tier"],
         "signal": result["signal"],
