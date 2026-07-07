@@ -1,6 +1,7 @@
 # app/main.py
 from typing import Any, Dict, Optional, List
 from datetime import datetime
+import uuid
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -10,7 +11,9 @@ from pydantic import BaseModel, Field
 from app.rules import analyze
 from app.data import load_parcel_from_csv
 
-app = FastAPI(title="iNSITE MVP API", version="0.2.0")
+
+app = FastAPI(title="iNSITE MVP API", version="0.5.0")
+
 
 EXACT_ORIGINS = [
     "https://insitehq.carrd.co",
@@ -18,6 +21,7 @@ EXACT_ORIGINS = [
     "http://localhost:8000",
     "http://localhost:3000",
 ]
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,24 +48,35 @@ class ConstraintItem(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
+    snapshot_id: str
+    city: Optional[str]
+    parcel_id: Optional[str]
+
     score: int
     tier: str
     signal: str
+
     flags: List[str]
     explanations: List[str]
     constraints: List[ConstraintItem]
+
     ruleset_version: str
     analyzed_at: str
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "time": datetime.utcnow().isoformat() + "Z"}
+    return {
+        "status": "ok",
+        "time": datetime.utcnow().isoformat() + "Z"
+    }
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 def analyze_endpoint(req: AnalyzeRequest):
+
     if req.parcel is None:
+
         if not req.city or not req.parcel_id:
             return JSONResponse(
                 status_code=400,
@@ -81,35 +96,55 @@ def analyze_endpoint(req: AnalyzeRequest):
                     "message": f"Parcel '{req.parcel_id}' not found for city '{req.city}'.",
                 },
             )
+
     else:
         parcel = req.parcel
 
+
     if isinstance(parcel, dict):
+
         parcel = {
             (k.strip() if isinstance(k, str) else k): v
             for k, v in parcel.items()
         }
 
+
         if "zoning" in parcel and parcel["zoning"] is not None:
             parcel["zoning"] = str(parcel["zoning"]).strip()
 
+
         if "lot_sqft" in parcel and parcel["lot_sqft"] not in (None, ""):
+
             try:
                 parcel["lot_sqft"] = float(parcel["lot_sqft"])
+
             except Exception:
                 pass
 
+
     result = analyze(parcel)
 
+
+    snapshot_id = "FSS-" + uuid.uuid4().hex[:8].upper()
+
+
     return {
+
+        "snapshot_id": snapshot_id,
+        "city": req.city,
+        "parcel_id": req.parcel_id,
+
         "score": int(result["score"]),
         "tier": result["tier"],
         "signal": result["signal"],
+
         "flags": result["flags"],
         "explanations": result["explanations"],
         "constraints": result["constraints"],
+
         "ruleset_version": result["ruleset_version"],
         "analyzed_at": result["analyzed_at"],
+
     }
 
 
