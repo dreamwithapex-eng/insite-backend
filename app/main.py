@@ -100,9 +100,9 @@ def analyze_endpoint(req: AnalyzeRequest):
             except Exception:
                 pass
 
-    result = analyze(parcel)
+     result = analyze(parcel)
 
-    return {
+     return {
         "score": int(result["score"]),
         "tier": result["tier"],
         "signal": result["signal"],
