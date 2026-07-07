@@ -10,11 +10,8 @@ from pydantic import BaseModel, Field
 from app.rules import analyze
 from app.data import load_parcel_from_csv
 
-app = FastAPI(title="iNSITE MVP API", version="0.1.0")
+app = FastAPI(title="iNSITE MVP API", version="0.2.0")
 
-# ---------- CORS (Carrd + local testing) ----------
-# Carrd serves pages from multiple subdomains (published + preview/editor),
-# so we explicitly allow your site and safely regex-allow carrd.co.
 EXACT_ORIGINS = [
     "https://insitehq.carrd.co",
     "https://www.insitehq.carrd.co",
@@ -31,7 +28,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- API Contract (Models) ----------
 
 class AnalyzeRequest(BaseModel):
     city: Optional[str] = Field(default=None)
@@ -39,23 +35,29 @@ class AnalyzeRequest(BaseModel):
     parcel: Optional[Dict[str, Any]] = Field(default=None)
 
 
+class ConstraintItem(BaseModel):
+    category: str
+    status: str
+    confidence: str
+    evidence: str
+    next_step: str
+
+
 class AnalyzeResponse(BaseModel):
     score: int
     tier: str
+    signal: str
     flags: List[str]
     explanations: List[str]
+    constraints: List[ConstraintItem]
     ruleset_version: str
     analyzed_at: str
 
-
-# ---------- Health Check ----------
 
 @app.get("/health")
 def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat() + "Z"}
 
-
-# ---------- Analysis Endpoint ----------
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 def analyze_endpoint(req: AnalyzeRequest):
@@ -70,6 +72,7 @@ def analyze_endpoint(req: AnalyzeRequest):
             )
 
         parcel = load_parcel_from_csv(req.city, req.parcel_id)
+
         if parcel is None:
             return JSONResponse(
                 status_code=404,
@@ -80,36 +83,37 @@ def analyze_endpoint(req: AnalyzeRequest):
             )
     else:
         parcel = req.parcel
-# --- Minimal v0.1 normalization (do not interpret, only normalize types) ---
-if isinstance(parcel, dict):
-    # normalize key casing/whitespace just in case
-    parcel = { (k.strip() if isinstance(k,str) else k): v for k,v in parcel.items() }
 
-    # ensure zoning is a clean string
-    if "zoning" in parcel and parcel["zoning"] is not None:
-        parcel["zoning"] = str(parcel["zoning"]).strip()
+    # Minimal normalization
+    if isinstance(parcel, dict):
+        parcel = {
+            (k.strip() if isinstance(k, str) else k): v
+            for k, v in parcel.items()
+        }
 
-    # ensure lot_sqft is numeric if possible
-    if "lot_sqft" in parcel and parcel["lot_sqft"] not in (None, ""):
-        try:
-            parcel["lot_sqft"] = float(parcel["lot_sqft"])
-        except Exception:
-            pass
+        if "zoning" in parcel and parcel["zoning"] is not None:
+            parcel["zoning"] = str(parcel["zoning"]).strip()
+
+        if "lot_sqft" in parcel and parcel["lot_sqft"] not in (None, ""):
+            try:
+                parcel["lot_sqft"] = float(parcel["lot_sqft"])
+            except Exception:
+                pass
+
     result = analyze(parcel)
 
     return {
         "score": int(result["score"]),
         "tier": result["tier"],
+        "signal": result["signal"],
         "flags": result["flags"],
         "explanations": result["explanations"],
+        "constraints": result["constraints"],
         "ruleset_version": result["ruleset_version"],
         "analyzed_at": result["analyzed_at"],
     }
 
 
-# ---------- Stable Public Contract ----------
-
 @app.post("/v1/submit", response_model=AnalyzeResponse)
 def submit(req: AnalyzeRequest):
     return analyze_endpoint(req)
-
