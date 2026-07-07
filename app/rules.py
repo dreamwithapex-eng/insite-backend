@@ -172,7 +172,7 @@ def analyze(parcel):
     score = max(0, min(100, score))
 
     # Canonical tiers: Green / Amber / Red
-    tier = "green" if score >= 70 else ("amber" if score >= 45 else "red")
+    tier = "green" if score >= 75 else ("amber" if score >= 45 else "red")
 
     # User-facing signal
     if tier == "green":
