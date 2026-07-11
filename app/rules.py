@@ -1,7 +1,7 @@
 # app/rules.py
 from datetime import datetime
 
-RULESET_VERSION = "0.4.0"
+RULESET_VERSION = "0.6.0"
 
 
 def create_constraint(category, status, confidence, evidence, next_step):
@@ -17,27 +17,33 @@ def create_constraint(category, status, confidence, evidence, next_step):
 def interpret_zoning(zoning):
     """
     Converts raw zoning labels into conservative development context signals.
-    This does NOT determine entitlement approval.
+    This does not determine entitlement approval.
     """
     zoning_text = zoning.lower()
 
-    if any(term in zoning_text for term in [
-        "single-family",
-        "single family",
-        "residential single",
-        "r-6"
-    ]):
+    if any(
+        term in zoning_text
+        for term in [
+            "single-family",
+            "single family",
+            "residential single",
+            "r-6",
+        ]
+    ):
         return {
             "category": "Residential",
             "intensity": "Low Density",
             "pathway": "Single-family residential pathway detected",
         }
 
-    if any(term in zoning_text for term in [
-        "medium density residential",
-        "residential urban",
-        "ru-1"
-    ]):
+    if any(
+        term in zoning_text
+        for term in [
+            "medium density residential",
+            "residential urban",
+            "ru-1",
+        ]
+    ):
         return {
             "category": "Residential",
             "intensity": "Medium Density",
@@ -82,12 +88,12 @@ def explanations_for_tier(tier):
             "No major disqualifying constraints detected at pre-feasibility stage.",
         ]
 
-    elif tier == "amber":
+    if tier == "amber":
         return [
             "One or more feasibility risk factors were identified; further diligence is recommended.",
         ]
 
-    elif tier == "red":
+    if tier == "red":
         return [
             "Parcel fails one or more baseline feasibility checks based on available data.",
         ]
@@ -106,7 +112,10 @@ def analyze(parcel):
 
     zoning = (parcel.get("zoning") or "").strip()
     zoning_normalized = zoning.lower()
+
     lot_sqft = parcel.get("lot_sqft")
+
+    flood_zone = (parcel.get("flood_zone") or "").strip().upper()
 
     # Zoning Intelligence
     if not zoning_normalized:
@@ -124,7 +133,6 @@ def analyze(parcel):
                 "Verify zoning classification with the local authority before design or acquisition commitment.",
             )
         )
-
     else:
         zoning_result = interpret_zoning(zoning)
 
@@ -133,15 +141,21 @@ def analyze(parcel):
                 "Zoning",
                 f"{zoning_result['category']} Pathway Detected",
                 "High",
-                f"Parcel is classified as {zoning}. iNSITE identified a {zoning_result['intensity']} {zoning_result['category']} development context.",
+                (
+                    f"Parcel is classified as {zoning}. "
+                    f"iNSITE identified a {zoning_result['intensity']} "
+                    f"{zoning_result['category']} development context."
+                ),
                 "Verify permitted uses, overlays, dimensional standards, and entitlement requirements before commitment.",
             )
         )
 
-
     # Parcel Dimensions
     if lot_sqft is None or str(lot_sqft).strip() == "":
         flags.append("MISSING_LOT_SIZE")
+        explanations.append(
+            "Lot size information is missing; analysis confidence is reduced."
+        )
 
         constraints.append(
             create_constraint(
@@ -152,80 +166,143 @@ def analyze(parcel):
                 "Confirm lot area and dimensional standards during diligence.",
             )
         )
-
     else:
         try:
             lot_sqft_val = float(lot_sqft)
 
             if lot_sqft_val < 2500:
                 flags.append("VERY_SMALL_LOT")
+                explanations.append(
+                    "Parcel lot size is below the baseline screening threshold."
+                )
 
                 constraints.append(
                     create_constraint(
                         "Parcel Dimensions",
                         "Constraint Detected",
                         "High",
-                        f"Parcel lot size is {lot_sqft_val:,.0f} square feet, below baseline screening threshold.",
+                        (
+                            f"Parcel lot size is {lot_sqft_val:,.0f} square feet, "
+                            "below the baseline screening threshold of 2,500 square feet."
+                        ),
                         "Review minimum lot size, setbacks, frontage, and buildable area requirements before advancing.",
                     )
                 )
-
             else:
                 constraints.append(
                     create_constraint(
                         "Parcel Dimensions",
                         "Low Friction",
                         "High",
-                        f"Parcel lot size is {lot_sqft_val:,.0f} square feet and passes baseline screening threshold.",
+                        (
+                            f"Parcel lot size is {lot_sqft_val:,.0f} square feet "
+                            "and passes the baseline lot-size screening threshold."
+                        ),
                         "Confirm detailed dimensional standards during formal diligence.",
                     )
                 )
 
         except (TypeError, ValueError):
             flags.append("INVALID_LOT_SIZE")
+            explanations.append(
+                "Lot size could not be parsed from the parcel record."
+            )
 
             constraints.append(
                 create_constraint(
                     "Parcel Dimensions",
                     "Review Needed",
                     "Low",
-                    "Lot size could not be parsed.",
-                    "Confirm parcel area from source records.",
+                    "Lot size could not be parsed from the parcel record.",
+                    "Confirm parcel area from authoritative source records.",
                 )
             )
 
+    # Environmental Intelligence
+    if not flood_zone:
+        constraints.append(
+            create_constraint(
+                "Environmental",
+                "Data Pending",
+                "Low",
+                "No floodplain information is currently available for this parcel.",
+                "Complete floodplain and environmental verification before advancing.",
+            )
+        )
 
-    # Future Layers
+    elif flood_zone in {"X", "X500"}:
+        constraints.append(
+            create_constraint(
+                "Environmental",
+                "Low Environmental Friction",
+                "Medium",
+                (
+                    f"Available records indicate Flood Zone {flood_zone}. "
+                    "No special flood-hazard signal was detected from the available environmental data."
+                ),
+                "Continue standard environmental diligence appropriate to the project.",
+            )
+        )
+
+    elif flood_zone in {"A", "AE", "AH", "AO", "V", "VE"}:
+        flags.append("FLOOD_REVIEW")
+        explanations.append(
+            f"Flood Zone {flood_zone} indicates that focused floodplain review is recommended."
+        )
+
+        constraints.append(
+            create_constraint(
+                "Environmental",
+                "Environmental Review Recommended",
+                "High",
+                (
+                    f"Available records indicate FEMA Flood Zone {flood_zone}, "
+                    "which may affect development requirements."
+                ),
+                "Verify floodplain status, insurance requirements, elevation requirements, and applicable development restrictions before advancing.",
+            )
+        )
+
+    else:
+        flags.append("UNRECOGNIZED_FLOOD_ZONE")
+        explanations.append(
+            "The available flood-zone value requires manual verification."
+        )
+
+        constraints.append(
+            create_constraint(
+                "Environmental",
+                "Environmental Review Needed",
+                "Low",
+                (
+                    f"Flood-zone value '{flood_zone}' is not recognized by "
+                    "the current ruleset."
+                ),
+                "Verify environmental conditions using authoritative local and FEMA sources.",
+            )
+        )
+
+    # Utilities Placeholder
     constraints.append(
         create_constraint(
             "Utilities",
             "Data Pending",
             "Low",
             "Utility service datasets are not connected in this ruleset version.",
-            "Verify water, sewer, electric, and service availability.",
+            "Verify water, sewer, electric, and other service availability with the appropriate provider.",
         )
     )
 
-    constraints.append(
-        create_constraint(
-            "Environmental",
-            "Data Pending",
-            "Low",
-            "Environmental datasets are not connected in this ruleset version.",
-            "Complete floodplain and environmental verification.",
-        )
-    )
-
+    # Infrastructure Access Placeholder
     constraints.append(
         create_constraint(
             "Infrastructure Access",
             "Data Pending",
             "Low",
-            "Infrastructure datasets are not connected in this ruleset version.",
-            "Verify access, frontage, and infrastructure readiness.",
+            "Infrastructure and access datasets are not connected in this ruleset version.",
+            "Verify road access, frontage, and infrastructure readiness before committing resources.",
         )
     )
-
 
     # Score
     score = 80
@@ -239,26 +316,23 @@ def analyze(parcel):
     if "VERY_SMALL_LOT" in flags:
         score -= 10
 
-    score = max(0, min(100, score))
+    if "FLOOD_REVIEW" in flags:
+        score -= 5
 
+    score = max(0, min(100, score))
 
     # Tier
     tier = "green" if score >= 75 else ("amber" if score >= 45 else "red")
 
-
     # Signal
     if tier == "green":
         signal = "Proceed with Verification"
-
     elif tier == "amber":
         signal = "Review Before Advancing"
-
     else:
         signal = "High Constraint"
 
-
     explanations += explanations_for_tier(tier)
-
 
     return {
         "score": score,
