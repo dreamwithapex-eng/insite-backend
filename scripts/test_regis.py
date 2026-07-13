@@ -19,8 +19,13 @@ def fetch_parcel(parcel_id: str) -> dict:
     """Retrieve one Memphis parcel centroid in longitude/latitude."""
 
     parameters = {
-        "where": f"PARCELID = '{parcel_id}'",
-        "outFields": "PARCELID,PARCELID2,CALC_ACRE,ZipCode,X,Y,POINT_X,POINT_Y",
+      "where": (
+    f"PARCELID = '{parcel_id}' "
+    f"OR PARCELID2 = '{parcel_id}' "
+    f"OR PARCELID = '{parcel_id.lstrip('0')}' "
+    f"OR PARCELID2 = '{parcel_id.lstrip('0')}'"
+),
+        "outFields": "PARCELID,PARCELID2,MAP,PARCEL,CALC_ACRE,ZipCode,X,Y,POINT_X,POINT_Y",
         "returnGeometry": "true",
         "outSR": "4326",
         "f": "json",
